@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "Reporting Hub LS",
+    "slug": "reporting-hub-ls",
+    "version": "1.0.0",
+    "updates": {
+      "enabled": false
+    },
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#0A3556"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "ls.reporting.hub"
+    },
+    "android": {
+      "package": "ls.reporting.hub"
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "scheme": "reportinghub",
+    "plugins": [
+      "expo-font"
+    ]
+  }
+}

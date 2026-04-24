@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.expo/
+*.log
+
+# Expo / React Native
+.expo-shared/
+web-build/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db

@@ -1,0 +1,10 @@
+{
+  "name": "reporting-hub-ls-project",
+  "private": true,
+  "scripts": {
+    "start": "npm --prefix reporting-hub-ls start",
+    "android": "npm --prefix reporting-hub-ls run android",
+    "ios": "npm --prefix reporting-hub-ls run ios",
+    "web": "npm --prefix reporting-hub-ls run web"
+  }
+}
