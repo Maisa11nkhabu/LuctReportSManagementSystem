@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Image,
   TouchableOpacity, KeyboardAvoidingView, Platform, TextInput, StatusBar as RNStatusBar,
@@ -7,7 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
-import { CLASSES, FACULTIES, PROGRAMMES } from '../data/seedData';
+import { useMasterData } from '../context/MasterDataContext';
 import { Colors, Spacing, BorderRadius, Typography } from '../theme';
 import { Input, Button } from '../components/UI';
 
@@ -15,6 +15,7 @@ export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const topInset = Math.max(insets.top, RNStatusBar.currentHeight || 0);
   const { login, register } = useAuth();
+  const { faculties, programmesByFaculty, classes } = useMasterData();
   const [mode, setMode] = useState('login');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -34,16 +35,23 @@ export default function LoginScreen() {
     { label: 'PL', email: 'kapela.morutwa@limkokwing.ac.ls', pw: 'luct1234' },
   ];
 
-  const programmeOptions = useMemo(() => PROGRAMMES[faculty] || [], [faculty]);
+  const programmeOptions = useMemo(() => programmesByFaculty[faculty] || [], [faculty, programmesByFaculty]);
   const classOptions = useMemo(
-    () => CLASSES.filter(item => item.programme === programme),
-    [programme]
+    () => classes.filter(item => item.programme === programme),
+    [classes, programme]
   );
 
+  useEffect(() => {
+    if (!faculties.length) return;
+    if (!faculties.find(item => item.id === faculty)) {
+      setRegistrationDefaults(faculties[0].id);
+    }
+  }, [faculties]);
+
   const setRegistrationDefaults = (nextFaculty, nextProgramme) => {
-    const programmePool = PROGRAMMES[nextFaculty] || [];
+    const programmePool = programmesByFaculty[nextFaculty] || [];
     const resolvedProgramme = nextProgramme || programmePool[0]?.id || '';
-    const resolvedClass = CLASSES.find(item => item.programme === resolvedProgramme)?.id || '';
+    const resolvedClass = classes.find(item => item.programme === resolvedProgramme)?.id || '';
     setFaculty(nextFaculty);
     setProgramme(resolvedProgramme);
     setClassId(resolvedClass);
@@ -149,7 +157,7 @@ export default function LoginScreen() {
 
                 <Text style={styles.inputLabel}>Faculty</Text>
                 <View style={styles.choiceWrap}>
-                  {FACULTIES.map(item => (
+                  {faculties.map(item => (
                     <TouchableOpacity
                       key={item.id}
                       onPress={() => setRegistrationDefaults(item.id)}

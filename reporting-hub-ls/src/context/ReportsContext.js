@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { REPORTS } from '../data/seedData';
 import { firebaseDb, hasFirebaseConfig } from '../config/firebase';
+import { FIRESTORE_COLLECTIONS } from '../services/firestoreCollections';
 import { saveReports, loadReports } from '../utils/storage';
 import {
   addDoc,
@@ -22,7 +23,7 @@ export function ReportsProvider({ children }) {
 
   useEffect(() => {
     if (hasFirebaseConfig() && firebaseDb) {
-      const reportsQuery = query(collection(firebaseDb, 'reports'), orderBy('createdAt', 'desc'));
+      const reportsQuery = query(collection(firebaseDb, FIRESTORE_COLLECTIONS.reports), orderBy('createdAt', 'desc'));
       const unsubscribe = onSnapshot(reportsQuery, (snapshot) => {
         const remoteReports = snapshot.docs.map(item => {
           const data = item.data();
@@ -64,7 +65,7 @@ export function ReportsProvider({ children }) {
 
     if (hasFirebaseConfig() && firebaseDb) {
       const { id, ...payload } = newReport;
-      const docRef = await addDoc(collection(firebaseDb, 'reports'), {
+      const docRef = await addDoc(collection(firebaseDb, FIRESTORE_COLLECTIONS.reports), {
         ...payload,
         createdAt: serverTimestamp(),
       });
@@ -77,7 +78,7 @@ export function ReportsProvider({ children }) {
 
   const updateReportFeedback = async (reportId, feedback) => {
     if (hasFirebaseConfig() && firebaseDb) {
-      await updateDoc(doc(firebaseDb, 'reports', reportId), {
+      await updateDoc(doc(firebaseDb, FIRESTORE_COLLECTIONS.reports, reportId), {
         prlFeedback: feedback,
         status: 'Reviewed',
       });
@@ -94,7 +95,7 @@ export function ReportsProvider({ children }) {
 
   const deleteReport = async (reportId) => {
     if (hasFirebaseConfig() && firebaseDb) {
-      await deleteDoc(doc(firebaseDb, 'reports', reportId));
+      await deleteDoc(doc(firebaseDb, FIRESTORE_COLLECTIONS.reports, reportId));
       return;
     }
 

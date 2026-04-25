@@ -24,6 +24,7 @@ import {
   ClassesScreen,
   ClassDetailScreen,
   CoursesScreen,
+  CourseFormScreen,
   LecturesScreen,
   AssignLectureScreen,
 } from '../screens/StaffClassesScreens';
@@ -97,6 +98,7 @@ function PLProfileStack() {
       <Stack.Screen name="ProgrammeList" component={ProgrammeListScreen} />
       <Stack.Screen name="ProgrammeDetail" component={ProgrammeDetailScreen} />
       <Stack.Screen name="Courses" component={CoursesScreen} />
+      <Stack.Screen name="CourseForm" component={CourseFormScreen} />
     </Stack.Navigator>
   );
 }
@@ -137,6 +139,7 @@ function PLCreateStack() {
       <Stack.Screen name="ProgrammeDetail" component={ProgrammeDetailScreen} />
       <Stack.Screen name="ClassDetail" component={ClassDetailScreen} />
       <Stack.Screen name="Courses" component={CoursesScreen} />
+      <Stack.Screen name="CourseForm" component={CourseFormScreen} />
       <Stack.Screen name="ReportDetail" component={ReportDetailScreen} />
     </Stack.Navigator>
   );
@@ -252,6 +255,7 @@ function PLHome() {
       <Stack.Screen name="Classes" component={ClassesStack} />
       <Stack.Screen name="ClassDetail" component={ClassDetailScreen} />
       <Stack.Screen name="Courses" component={CoursesScreen} />
+      <Stack.Screen name="CourseForm" component={CourseFormScreen} />
       <Stack.Screen name="Lectures" component={LecturesScreen} />
       <Stack.Screen name="AssignLecture" component={AssignLectureScreen} />
       <Stack.Screen name="Reports" component={ReportsStack} />

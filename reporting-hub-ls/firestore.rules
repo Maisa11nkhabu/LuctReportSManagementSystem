@@ -1,0 +1,76 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function role() {
+      return signedIn() && userDoc().data.role != null ? userDoc().data.role : null;
+    }
+
+    function sameUser(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function canManageAcademicData() {
+      return role() in ['PL', 'PRL'];
+    }
+
+    match /users/{userId} {
+      allow create: if signedIn() && sameUser(userId);
+      allow read, update: if signedIn() && (sameUser(userId) || role() in ['PL', 'PRL']);
+      allow delete: if false;
+    }
+
+    match /reports/{reportId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && role() == 'Lecturer';
+      allow update: if signedIn() && (role() in ['PRL', 'PL'] || resource.data.submittedBy == request.auth.uid);
+      allow delete: if signedIn() && role() == 'Lecturer' && resource.data.submittedBy == request.auth.uid;
+    }
+
+    match /assignments/{assignmentId} {
+      allow read: if signedIn();
+      allow create, update, delete: if signedIn() && role() == 'PL';
+    }
+
+    match /ratings/{ratingId} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && role() == 'Student' && request.resource.data.studentId == request.auth.uid;
+      allow delete: if signedIn() && (
+        (role() == 'Student' && resource.data.studentId == request.auth.uid) ||
+        role() in ['Lecturer', 'PRL', 'PL']
+      );
+    }
+
+    match /staff/{docId} {
+      allow read: if signedIn();
+      allow create, update, delete: if signedIn() && role() == 'PL';
+    }
+
+    match /classes/{docId} {
+      allow read: if signedIn();
+      allow create, update, delete: if signedIn() && role() == 'PL';
+    }
+
+    match /courses/{docId} {
+      allow read: if signedIn();
+      allow create, update, delete: if signedIn() && role() == 'PL';
+    }
+
+    match /programmes/{docId} {
+      allow read: if signedIn();
+      allow create, update, delete: if signedIn() && role() == 'PL';
+    }
+
+    match /faculties/{docId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+  }
+}

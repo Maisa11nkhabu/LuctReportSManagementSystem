@@ -7,6 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { AppDataProvider } from './src/context/AppDataContext';
+import { MasterDataProvider } from './src/context/MasterDataContext';
 import { ReportsProvider } from './src/context/ReportsContext';
 import LoginScreen from './src/screens/LoginScreen';
 import {
@@ -50,14 +51,16 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <AuthProvider>
-          <AppDataProvider>
-            <ReportsProvider>
-              <NavigationContainer>
-                <StatusBar style="light" backgroundColor="#0A3556" />
-                <RootNavigator />
-              </NavigationContainer>
-            </ReportsProvider>
-          </AppDataProvider>
+          <MasterDataProvider>
+            <AppDataProvider>
+              <ReportsProvider>
+                <NavigationContainer>
+                  <StatusBar style="light" backgroundColor="#0A3556" />
+                  <RootNavigator />
+                </NavigationContainer>
+              </ReportsProvider>
+            </AppDataProvider>
+          </MasterDataProvider>
         </AuthProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

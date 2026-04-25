@@ -5,8 +5,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { useAppData } from '../context/AppDataContext';
+import { useMasterData } from '../context/MasterDataContext';
 import { useReports } from '../context/ReportsContext';
-import { STAFF, FACULTIES } from '../data/seedData';
 import { Colors, Spacing, BorderRadius, Typography } from '../theme';
 import { Card, RoleBadge, StatCard } from '../components/UI';
 
@@ -15,12 +15,13 @@ export default function ProfileScreen({ navigation }) {
   const topInset = Math.max(insets.top, RNStatusBar.currentHeight || 0);
   const { user, logout } = useAuth();
   const { timetable } = useAppData();
+  const { staff, faculties } = useMasterData();
   const { reports } = useReports();
 
-  const staff = STAFF.find(item => item.id === user?.staffId);
-  const faculty = FACULTIES.find(item => item.id === (staff?.faculty || user?.faculty));
-  const myReports = user?.role === 'Lecturer' && staff
-    ? reports.filter(item => item.lecturerName === staff.name)
+  const staffMember = staff.find(item => item.id === user?.staffId);
+  const faculty = faculties.find(item => item.id === (staffMember?.faculty || user?.faculty));
+  const myReports = user?.role === 'Lecturer' && staffMember
+    ? reports.filter(item => item.lecturerName === staffMember.name)
     : reports.filter(item => faculty && item.facultyName === faculty.name);
   const mySlots = timetable.filter(item => item.lecturerId === user?.staffId);
   const initial = (user?.name || 'U').split(' ').slice(-1)[0][0].toUpperCase();
@@ -78,7 +79,7 @@ export default function ProfileScreen({ navigation }) {
         <Card>
           {[
             ['Name', user?.name, 'person-outline'],
-            ['Email', staff?.email || user?.email || '-', 'mail-outline'],
+            ['Email', staffMember?.email || user?.email || '-', 'mail-outline'],
             ['Role', user?.role, 'shield-outline'],
             ['Faculty', faculty?.shortName || user?.faculty || '-', 'business-outline'],
           ].map(([label, value, icon]) => (

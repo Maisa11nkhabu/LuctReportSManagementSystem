@@ -5,8 +5,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { useAppData } from '../context/AppDataContext';
+import { useMasterData } from '../context/MasterDataContext';
 import { useReports } from '../context/ReportsContext';
-import { CLASSES, PROGRAMMES, STAFF } from '../data/seedData';
+import { getClassDisplayName } from '../data/seedData';
 import { Colors, Spacing, BorderRadius, Typography } from '../theme';
 import { StatCard, Card, RoleBadge, ScreenHeader } from '../components/UI';
 
@@ -14,7 +15,8 @@ const HERO_BODY_GAP = 8;
 
 export function StudentDashboard({ navigation }) {
   const { user, logout } = useAuth();
-  const myClass = CLASSES.find(item => item.id === user?.classId);
+  const { classes } = useMasterData();
+  const myClass = classes.find(item => item.id === user?.classId);
 
   return (
     <DashboardShell title={user?.name} subtitle="Student Dashboard" role="Student" onLogout={logout}>
@@ -24,7 +26,7 @@ export function StudentDashboard({ navigation }) {
         <StatCard label="Faculty" value={user?.faculty || '-'} icon="business-outline" color={Colors.navy} />
 
         <Text style={styles.sectionTitle}>Quick Actions</Text>
-        {[
+        {[ 
           { label: 'Attendance', icon: 'checkmark-done-outline', screen: 'Attendance', color: Colors.blue },
           { label: 'Rating', icon: 'star-outline', screen: 'Rating', color: Colors.warning },
         ].map(item => (
@@ -38,10 +40,25 @@ export function StudentDashboard({ navigation }) {
 export function LecturerDashboard({ navigation }) {
   const { user, logout } = useAuth();
   const { timetable } = useAppData();
+  const { classes, courses, staff } = useMasterData();
   const { reports } = useReports();
-  const staff = STAFF.find(item => item.id === user?.staffId);
+  const lecturer = staff.find(item => item.id === user?.staffId);
   const myTimetable = timetable.filter(item => item.lecturerId === user?.staffId);
-  const myReports = reports.filter(item => staff && item.lecturerName === staff.name);
+  const myReports = reports.filter(item => lecturer && item.lecturerName === lecturer.name);
+  const assignedModules = myTimetable.slice(0, 3).map((slot, index) => {
+    const course = courses.find(item => item.id === slot.courseId);
+    const klass = classes.find(item => item.id === slot.classId);
+
+    return {
+      id: slot.id || `${slot.classId}-${slot.courseId}-${index}`,
+      courseName: course?.name || slot.courseId,
+      courseCode: course?.code || slot.courseId,
+      classId: slot.classId,
+      className: klass ? getClassDisplayName(klass.id) : slot.classId,
+      schedule: `${slot.day} · ${slot.time}`,
+      venue: slot.venue,
+    };
+  });
 
   return (
     <DashboardShell title={user?.name} subtitle="Lecturer Dashboard" role="Lecturer" onLogout={logout}>
@@ -54,6 +71,25 @@ export function LecturerDashboard({ navigation }) {
             <StatCard label="Submitted Reports" value={myReports.length} icon="document-text-outline" color={Colors.navy} />
           </View>
         </View>
+
+        <Text style={styles.sectionTitle}>Assigned Modules</Text>
+        {assignedModules.length === 0 ? (
+          <Card style={styles.infoCard}>
+            <Text style={styles.infoTitle}>No module assigned yet</Text>
+            <Text style={styles.infoText}>Your assigned modules will show here after the programme leader adds them.</Text>
+          </Card>
+        ) : (
+          assignedModules.map(item => (
+            <Card key={item.id} onPress={() => navigation.navigate('Classes')} style={styles.assignmentCard}>
+              <Text style={styles.assignmentTitle}>{item.courseName}</Text>
+              <Text style={styles.assignmentCode}>{item.courseCode}</Text>
+              <Text style={styles.assignmentMeta}>{item.classId}</Text>
+              <Text style={styles.assignmentSubMeta}>{item.className}</Text>
+              <Text style={styles.assignmentSubMeta}>{item.schedule}</Text>
+              <Text style={styles.assignmentSubMeta}>Venue: {item.venue}</Text>
+            </Card>
+          ))
+        )}
 
         <Text style={styles.sectionTitle}>Quick Actions</Text>
         {[
@@ -73,9 +109,10 @@ export function LecturerDashboard({ navigation }) {
 
 export function PRLDashboard({ navigation }) {
   const { user, logout } = useAuth();
+  const { classes, staff } = useMasterData();
   const { reports } = useReports();
-  const staff = STAFF.find(item => item.id === user?.staffId);
-  const myFacultyClasses = CLASSES.filter(item => item.faculty === staff?.faculty);
+  const person = staff.find(item => item.id === user?.staffId);
+  const myFacultyClasses = classes.filter(item => item.faculty === person?.faculty);
   const pendingReports = reports.filter(item => item.status === 'Submitted');
 
   return (
@@ -108,12 +145,13 @@ export function PRLDashboard({ navigation }) {
 export function PLDashboard({ navigation }) {
   const { user, logout } = useAuth();
   const { timetable } = useAppData();
+  const { classes, programmesByFaculty, staff } = useMasterData();
   const { reports } = useReports();
-  const staff = STAFF.find(item => item.id === user?.staffId);
-  const facultyProgrammes = staff ? (PROGRAMMES[staff.faculty] || []) : [];
+  const person = staff.find(item => item.id === user?.staffId);
+  const facultyProgrammes = person ? (programmesByFaculty[person.faculty] || []) : [];
   const facultyLectures = timetable.filter(slot => {
-    const klass = CLASSES.find(item => item.id === slot.classId);
-    return klass?.faculty === staff?.faculty;
+    const klass = classes.find(item => item.id === slot.classId);
+    return klass?.faculty === person?.faculty;
   });
 
   return (
@@ -131,6 +169,7 @@ export function PLDashboard({ navigation }) {
 
         <Text style={styles.sectionTitle}>Quick Actions</Text>
         {[
+          { label: 'Add Course', icon: 'book-outline', screen: 'CourseForm', color: Colors.blue },
           { label: 'Assign Classes', icon: 'add-circle-outline', screen: 'AssignLecture', color: Colors.success },
           { label: 'View Lectures', icon: 'mic-outline', screen: 'Lectures', color: Colors.blue },
           { label: 'Programmes', icon: 'layers-outline', screen: 'ProgrammeList', color: Colors.navy },
@@ -183,6 +222,7 @@ export function PLQuickActionsScreen({ navigation }) {
 
         {[
           { label: 'Assign Classes', icon: 'add-circle-outline', screen: 'AssignLecture', color: Colors.success },
+          { label: 'Add Course', icon: 'book-outline', screen: 'CourseForm', color: Colors.blue },
           { label: 'View Lectures', icon: 'mic-outline', screen: 'Lectures', color: Colors.blue },
           { label: 'Open Reports', icon: 'reader-outline', screen: 'Reports', color: Colors.navy },
           { label: 'Open Programmes', icon: 'layers-outline', screen: 'ProgrammeList', color: Colors.warning },
@@ -283,4 +323,12 @@ const styles = StyleSheet.create({
   panelCard: { marginBottom: Spacing.md },
   panelTitle: { ...Typography.h4, marginBottom: 6 },
   panelText: { color: Colors.gray, fontSize: 13, lineHeight: 20 },
+  infoCard: { marginBottom: Spacing.sm },
+  infoTitle: { fontSize: 15, fontWeight: '700', color: Colors.navy, marginBottom: 4 },
+  infoText: { color: Colors.gray, fontSize: 13, lineHeight: 20 },
+  assignmentCard: { marginBottom: Spacing.sm },
+  assignmentTitle: { fontSize: 15, fontWeight: '700', color: Colors.navy },
+  assignmentCode: { fontSize: 12, color: Colors.blue, marginTop: 2 },
+  assignmentMeta: { fontSize: 13, fontWeight: '700', color: Colors.navy, marginTop: 8 },
+  assignmentSubMeta: { fontSize: 12, color: Colors.gray, marginTop: 2 },
 });

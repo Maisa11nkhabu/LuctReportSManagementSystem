@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, ScrollView, TextInput, TouchableOpacity, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { useAppData } from '../context/AppDataContext';
-import { STAFF, CLASSES, COURSES, FACULTIES, getClassDisplayName } from '../data/seedData';
+import { useMasterData } from '../context/MasterDataContext';
+import { getClassDisplayName } from '../data/seedData';
+import { validateAssignment, validateCourse } from '../services/validation';
 import { Colors, Spacing, BorderRadius, Typography } from '../theme';
 import { Card, SearchBar, ScreenHeader, RoleBadge, EmptyState, Button } from '../components/UI';
 
@@ -12,19 +14,23 @@ export function StaffListScreen({ route, navigation }) {
   const [query, setQuery] = useState('');
   const [filterRole, setFilterRole] = useState('All');
   const { user } = useAuth();
+  const { staff, faculties } = useMasterData();
 
-  const baseStaff = facultyId
-    ? STAFF.filter(item => item.faculty === facultyId)
-    : STAFF.filter(item => item.faculty === user?.faculty);
+  const resolvedFaculty = facultyId || user?.faculty;
+  const baseStaff = resolvedFaculty
+    ? staff.filter(item => item.faculty === resolvedFaculty)
+    : staff;
 
   const roles = ['All', 'PL', 'PRL', 'Lecturer'];
   const filtered = baseStaff.filter(item => {
-    const matchQuery = item.name.toLowerCase().includes(query.toLowerCase()) || item.role.toLowerCase().includes(query.toLowerCase());
+    const matchQuery =
+      item.name.toLowerCase().includes(query.toLowerCase()) ||
+      item.role.toLowerCase().includes(query.toLowerCase());
     const matchRole = filterRole === 'All' || item.role === filterRole;
     return matchQuery && matchRole;
   });
 
-  const faculty = FACULTIES.find(item => item.id === (facultyId || user?.faculty));
+  const faculty = faculties.find(item => item.id === resolvedFaculty);
 
   return (
     <View style={styles.screen}>
@@ -67,7 +73,9 @@ export function StaffListScreen({ route, navigation }) {
 export function StaffDetailScreen({ route, navigation }) {
   const { staffId } = route.params;
   const { timetable } = useAppData();
-  const person = STAFF.find(item => item.id === staffId);
+  const { staff, courses, classes } = useMasterData();
+  const person = staff.find(item => item.id === staffId);
+
   if (!person) return null;
 
   const myClasses = timetable.filter(slot => slot.lecturerId === staffId);
@@ -93,12 +101,18 @@ export function StaffDetailScreen({ route, navigation }) {
         {myClasses.length > 0 && (
           <>
             <Text style={styles.sectionTitle}>Assigned Classes ({myClasses.length})</Text>
-            {myClasses.map((slot, index) => (
-              <Card key={slot.id || index}>
-                <Text style={styles.classCode}>{slot.classId}</Text>
-                <Text style={styles.classMeta}>{slot.day} · {slot.time} · {slot.venue}</Text>
-              </Card>
-            ))}
+            {myClasses.map((slot, index) => {
+              const course = courses.find(item => item.id === slot.courseId);
+              const klass = classes.find(item => item.id === slot.classId);
+              return (
+                <Card key={slot.id || index}>
+                  <Text style={styles.classCode}>{course?.name || slot.courseId}</Text>
+                  <Text style={styles.classMeta}>{course?.code || slot.courseId}</Text>
+                  <Text style={styles.classMeta}>{klass?.id || slot.classId} | {slot.day} | {slot.time}</Text>
+                  <Text style={styles.classMeta}>Venue: {slot.venue}</Text>
+                </Card>
+              );
+            })}
           </>
         )}
         <View style={{ height: 32 }} />
@@ -110,10 +124,10 @@ export function StaffDetailScreen({ route, navigation }) {
 export function ClassesScreen({ navigation }) {
   const { user } = useAuth();
   const { timetable } = useAppData();
+  const { classes } = useMasterData();
   const [query, setQuery] = useState('');
 
-  const myClasses = CLASSES.filter(item => item.faculty === user?.faculty);
-
+  const myClasses = classes.filter(item => item.faculty === user?.faculty);
   const filtered = myClasses.filter(item =>
     item.id.toLowerCase().includes(query.toLowerCase()) ||
     item.programme.toLowerCase().includes(query.toLowerCase())
@@ -161,8 +175,10 @@ export function ClassesScreen({ navigation }) {
 export function ClassDetailScreen({ route, navigation }) {
   const { classId } = route.params;
   const { timetable } = useAppData();
-  const item = CLASSES.find(entry => entry.id === classId);
+  const { classes, courses, staff } = useMasterData();
+  const item = classes.find(entry => entry.id === classId);
   const slots = timetable.filter(slot => slot.classId === classId);
+
   if (!item) return null;
 
   return (
@@ -179,12 +195,12 @@ export function ClassDetailScreen({ route, navigation }) {
 
         <Text style={styles.sectionTitle}>Timetable ({slots.length} slots)</Text>
         {slots.length === 0 ? <EmptyState icon="calendar-outline" message="No timetable entries" /> : slots.map((slot, index) => {
-          const course = COURSES.find(entry => entry.id === slot.courseId);
-          const lecturer = STAFF.find(entry => entry.id === slot.lecturerId);
+          const course = courses.find(entry => entry.id === slot.courseId);
+          const lecturer = staff.find(entry => entry.id === slot.lecturerId);
           return (
             <Card key={slot.id || index}>
               <Text style={styles.classCode}>{course?.name || slot.courseId}</Text>
-              <Text style={styles.classMeta}>{slot.day} · {slot.time} · {slot.venue}</Text>
+              <Text style={styles.classMeta}>{slot.day} | {slot.time} | {slot.venue}</Text>
               {lecturer && <Text style={styles.classMeta}>Lecturer: {lecturer.name}</Text>}
             </Card>
           );
@@ -198,8 +214,11 @@ export function ClassDetailScreen({ route, navigation }) {
 export function CoursesScreen({ navigation }) {
   const { user } = useAuth();
   const { timetable } = useAppData();
+  const { courses } = useMasterData();
   const [query, setQuery] = useState('');
-  const myCourses = COURSES.filter(item => item.faculty === user?.faculty);
+  const canCreate = user?.role === 'PL';
+
+  const myCourses = courses.filter(item => item.faculty === user?.faculty);
   const filtered = myCourses.filter(item =>
     item.name.toLowerCase().includes(query.toLowerCase()) ||
     item.code.toLowerCase().includes(query.toLowerCase())
@@ -207,7 +226,16 @@ export function CoursesScreen({ navigation }) {
 
   return (
     <View style={styles.screen}>
-      <ScreenHeader title="Courses" subtitle={`${filtered.length} courses`} onBack={() => navigation.goBack()} />
+      <ScreenHeader
+        title="Courses"
+        subtitle={`${filtered.length} courses`}
+        onBack={() => navigation.goBack()}
+        right={canCreate ? (
+          <TouchableOpacity onPress={() => navigation.navigate('CourseForm')} style={styles.headerBtn}>
+            <Ionicons name="add" size={20} color={Colors.white} />
+          </TouchableOpacity>
+        ) : null}
+      />
       <View style={styles.body}>
         <SearchBar value={query} onChangeText={setQuery} placeholder="Search courses..." />
         <FlatList
@@ -224,7 +252,7 @@ export function CoursesScreen({ navigation }) {
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.classCode}>{item.name}</Text>
-                    <Text style={styles.classMeta}>{item.code} · {item.faculty}</Text>
+                    <Text style={styles.classMeta}>{item.code} | {item.faculty}</Text>
                     <Text style={styles.classMeta}>{slots.length} class slot(s)</Text>
                   </View>
                 </View>
@@ -238,18 +266,100 @@ export function CoursesScreen({ navigation }) {
   );
 }
 
+export function CourseFormScreen({ navigation }) {
+  const { user } = useAuth();
+  const { courses, createCourse } = useMasterData();
+  const [form, setForm] = useState({
+    code: '',
+    name: '',
+    faculty: user?.faculty || '',
+  });
+  const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
+
+  const handleChange = (key, value) => {
+    setForm(prev => ({ ...prev, [key]: value }));
+    if (errors[key]) {
+      setErrors(prev => ({ ...prev, [key]: null }));
+    }
+  };
+
+  const handleSave = async () => {
+    const validation = validateCourse(form, courses);
+    if (!validation.isValid) {
+      setErrors(validation.errors);
+      Alert.alert('Missing details', 'Please fix the highlighted course fields first.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await createCourse(validation.normalized);
+      Alert.alert('Course saved', 'The course is now available for module assignment.', [
+        { text: 'OK', onPress: () => navigation.goBack() },
+      ]);
+    } catch (error) {
+      Alert.alert('Save failed', error?.message || 'Could not create the course right now.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <View style={styles.screen}>
+      <ScreenHeader title="Add Course" subtitle="Programme Leader tools" onBack={() => navigation.goBack()} />
+      <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
+        <Card>
+          <Text style={styles.sectionTitle}>Course Details</Text>
+          <Text style={styles.formLabel}>Course Code</Text>
+          <TextInput
+            value={form.code}
+            onChangeText={value => handleChange('code', value.toUpperCase())}
+            placeholder="BIMP3210"
+            placeholderTextColor={Colors.gray}
+            style={[styles.input, errors.code && styles.inputError]}
+          />
+          {errors.code ? <Text style={styles.errorText}>{errors.code}</Text> : null}
+
+          <Text style={styles.formLabel}>Course Name</Text>
+          <TextInput
+            value={form.name}
+            onChangeText={value => handleChange('name', value)}
+            placeholder="Mobile Device Programming"
+            placeholderTextColor={Colors.gray}
+            style={[styles.input, errors.name && styles.inputError]}
+          />
+          {errors.name ? <Text style={styles.errorText}>{errors.name}</Text> : null}
+
+          <Text style={styles.formLabel}>Faculty</Text>
+          <TextInput
+            value={form.faculty}
+            editable={false}
+            placeholderTextColor={Colors.gray}
+            style={[styles.input, styles.readOnlyInput]}
+          />
+
+          <Button title={saving ? 'Saving...' : 'Save Course'} onPress={handleSave} loading={saving} style={{ marginTop: 12 }} />
+        </Card>
+      </ScrollView>
+    </View>
+  );
+}
+
 export function LecturesScreen({ navigation }) {
   const { user } = useAuth();
   const { timetable, removeTimetableSlot } = useAppData();
+  const { classes, courses, staff } = useMasterData();
   const [query, setQuery] = useState('');
+
   const slots = timetable.filter(slot => {
-    const cls = CLASSES.find(item => item.id === slot.classId);
-    return cls?.faculty === user?.faculty;
+    const klass = classes.find(item => item.id === slot.classId);
+    return klass?.faculty === user?.faculty;
   });
 
   const filtered = slots.filter(slot => {
-    const course = COURSES.find(item => item.id === slot.courseId);
-    const lecturer = STAFF.find(item => item.id === slot.lecturerId);
+    const course = courses.find(item => item.id === slot.courseId);
+    const lecturer = staff.find(item => item.id === slot.lecturerId);
     return (
       slot.classId.toLowerCase().includes(query.toLowerCase()) ||
       (course?.name || '').toLowerCase().includes(query.toLowerCase()) ||
@@ -291,13 +401,13 @@ export function LecturesScreen({ navigation }) {
           keyExtractor={(item, index) => item.id || String(index)}
           showsVerticalScrollIndicator={false}
           renderItem={({ item }) => {
-            const course = COURSES.find(entry => entry.id === item.courseId);
-            const lecturer = STAFF.find(entry => entry.id === item.lecturerId);
+            const course = courses.find(entry => entry.id === item.courseId);
+            const lecturer = staff.find(entry => entry.id === item.lecturerId);
             return (
               <Card>
                 <Text style={styles.classCode}>{course?.name || item.courseId}</Text>
-                <Text style={styles.classMeta}>{item.classId} · {item.day} · {item.time}</Text>
-                <Text style={styles.classMeta}>Venue: {item.venue} · {item.type}</Text>
+                <Text style={styles.classMeta}>{item.classId} | {item.day} | {item.time}</Text>
+                <Text style={styles.classMeta}>Venue: {item.venue} | {item.type}</Text>
                 {lecturer && <Text style={styles.classMeta}>Lecturer: {lecturer.name}</Text>}
                 {canAssign && (
                   <TouchableOpacity style={styles.deleteLink} onPress={() => handleDelete(item)}>
@@ -317,28 +427,35 @@ export function LecturesScreen({ navigation }) {
 
 export function AssignLectureScreen({ navigation }) {
   const { user } = useAuth();
-  const { addTimetableSlot } = useAppData();
-  const classes = CLASSES.filter(item => item.faculty === user?.faculty);
-  const facultyCourses = COURSES.filter(item => item.faculty === user?.faculty);
-  const lecturers = STAFF.filter(item => item.role === 'Lecturer' && item.faculty === user?.faculty);
+  const { timetable, addTimetableSlot } = useAppData();
+  const { classes, courses, staff } = useMasterData();
+
+  const facultyClasses = useMemo(
+    () => classes.filter(item => item.faculty === user?.faculty),
+    [classes, user?.faculty]
+  );
+  const facultyCourses = useMemo(
+    () => courses.filter(item => item.faculty === user?.faculty),
+    [courses, user?.faculty]
+  );
+  const lecturers = useMemo(
+    () => staff.filter(item => item.role === 'Lecturer' && item.faculty === user?.faculty),
+    [staff, user?.faculty]
+  );
 
   const [courseId, setCourseId] = useState(facultyCourses[0]?.id || '');
-  const [classId, setClassId] = useState(classes[0]?.id || '');
+  const [classId, setClassId] = useState(facultyClasses[0]?.id || '');
   const [lecturerId, setLecturerId] = useState(lecturers[0]?.id || '');
   const [day, setDay] = useState('Monday');
   const [time, setTime] = useState('08:30-10:30');
   const [venue, setVenue] = useState('Room 1');
+  const [errors, setErrors] = useState({});
 
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
   const times = ['08:30-10:30', '10:30-12:30', '12:30-14:30', '14:30-16:30'];
 
   const handleSave = async () => {
-    if (!courseId || !classId || !lecturerId || !day || !time || !venue.trim()) {
-      Alert.alert('Missing details', 'Complete all assignment fields first.');
-      return;
-    }
-
-    await addTimetableSlot({
+    const payload = {
       classId,
       courseId,
       lecturerId,
@@ -346,8 +463,16 @@ export function AssignLectureScreen({ navigation }) {
       time,
       venue: venue.trim(),
       type: 'Lecture',
-    });
+    };
 
+    const validation = validateAssignment(payload, timetable);
+    if (!validation.isValid) {
+      setErrors(validation.errors);
+      Alert.alert('Missing details', validation.errors.schedule || 'Complete all assignment fields first.');
+      return;
+    }
+
+    await addTimetableSlot(payload);
     Alert.alert('Assignment saved', 'The lecturer has been assigned to the selected module.', [
       { text: 'OK', onPress: () => navigation.goBack() },
     ]);
@@ -360,12 +485,15 @@ export function AssignLectureScreen({ navigation }) {
         <Card>
           <Text style={styles.sectionTitle}>Course</Text>
           <ChoiceGroup value={courseId} onChange={setCourseId} options={facultyCourses.map(item => ({ value: item.id, label: item.code }))} />
+          {errors.courseId ? <Text style={styles.errorText}>{errors.courseId}</Text> : null}
 
           <Text style={styles.sectionTitle}>Class</Text>
-          <ChoiceGroup value={classId} onChange={setClassId} options={classes.map(item => ({ value: item.id, label: item.id }))} />
+          <ChoiceGroup value={classId} onChange={setClassId} options={facultyClasses.map(item => ({ value: item.id, label: item.id }))} />
+          {errors.classId ? <Text style={styles.errorText}>{errors.classId}</Text> : null}
 
           <Text style={styles.sectionTitle}>Lecturer</Text>
           <ChoiceGroup value={lecturerId} onChange={setLecturerId} options={lecturers.map(item => ({ value: item.id, label: item.name }))} />
+          {errors.lecturerId ? <Text style={styles.errorText}>{errors.lecturerId}</Text> : null}
 
           <Text style={styles.sectionTitle}>Day</Text>
           <ChoiceGroup value={day} onChange={setDay} options={days.map(item => ({ value: item, label: item }))} />
@@ -379,8 +507,10 @@ export function AssignLectureScreen({ navigation }) {
             onChangeText={setVenue}
             placeholder="Room or lab"
             placeholderTextColor={Colors.gray}
-            style={styles.input}
+            style={[styles.input, errors.venue && styles.inputError]}
           />
+          {errors.venue ? <Text style={styles.errorText}>{errors.venue}</Text> : null}
+          {errors.schedule ? <Text style={styles.errorText}>{errors.schedule}</Text> : null}
 
           <Button title="Save Assignment" onPress={handleSave} style={{ marginTop: 12 }} />
         </Card>
@@ -446,6 +576,7 @@ const styles = StyleSheet.create({
   choiceChipActive: { backgroundColor: Colors.blue },
   choiceChipText: { color: Colors.navy, fontSize: 12, fontWeight: '600' },
   choiceChipTextActive: { color: Colors.white },
+  formLabel: { fontSize: 13, fontWeight: '500', color: Colors.gray, marginTop: 6, marginBottom: 6 },
   input: {
     borderWidth: 1.5,
     borderColor: Colors.lightBlue,
@@ -455,4 +586,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     color: Colors.black,
   },
+  inputError: { borderColor: Colors.danger },
+  readOnlyInput: { backgroundColor: Colors.lightGray, color: Colors.gray },
+  errorText: { color: Colors.danger, fontSize: 12, marginTop: 4 },
 });

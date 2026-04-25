@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { STAFF, TIMETABLE as SEED_TIMETABLE } from '../data/seedData';
+import { TIMETABLE as SEED_TIMETABLE } from '../data/seedData';
 import { firebaseDb, hasFirebaseConfig } from '../config/firebase';
+import { FIRESTORE_COLLECTIONS } from '../services/firestoreCollections';
 import {
   loadRatings,
   loadTimetable,
@@ -27,8 +28,8 @@ export function AppDataProvider({ children }) {
 
   useEffect(() => {
     if (hasFirebaseConfig() && firebaseDb) {
-      const assignmentsQuery = query(collection(firebaseDb, 'assignments'), orderBy('createdAt', 'desc'));
-      const ratingsQuery = query(collection(firebaseDb, 'ratings'), orderBy('updatedAt', 'desc'));
+      const assignmentsQuery = query(collection(firebaseDb, FIRESTORE_COLLECTIONS.assignments), orderBy('createdAt', 'desc'));
+      const ratingsQuery = query(collection(firebaseDb, FIRESTORE_COLLECTIONS.ratings), orderBy('updatedAt', 'desc'));
 
       let assignmentsLoaded = false;
       let ratingsLoaded = false;
@@ -102,7 +103,7 @@ export function AppDataProvider({ children }) {
 
     if (hasFirebaseConfig() && firebaseDb) {
       const { id, createdAt, ...payload } = newSlot;
-      await setDoc(doc(firebaseDb, 'assignments', newSlot.id), {
+      await setDoc(doc(firebaseDb, FIRESTORE_COLLECTIONS.assignments, newSlot.id), {
         ...payload,
         createdAt: serverTimestamp(),
       });
@@ -115,7 +116,7 @@ export function AppDataProvider({ children }) {
 
   const removeTimetableSlot = async (slotId) => {
     if (hasFirebaseConfig() && firebaseDb) {
-      await deleteDoc(doc(firebaseDb, 'assignments', slotId));
+      await deleteDoc(doc(firebaseDb, FIRESTORE_COLLECTIONS.assignments, slotId));
       return;
     }
 
@@ -123,11 +124,10 @@ export function AppDataProvider({ children }) {
   };
 
   const saveRating = async (rating) => {
-    const lecturer = STAFF.find(member => member.id === rating.lecturerId);
     const entryId = `${rating.studentId}_${rating.lecturerId}`;
     const entry = {
       id: entryId,
-      lecturerName: lecturer?.name || '',
+      lecturerName: rating.lecturerName || '',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       ...rating,
@@ -135,7 +135,7 @@ export function AppDataProvider({ children }) {
 
     if (hasFirebaseConfig() && firebaseDb) {
       const { id, createdAt, updatedAt, ...payload } = entry;
-      await setDoc(doc(firebaseDb, 'ratings', entryId), {
+      await setDoc(doc(firebaseDb, FIRESTORE_COLLECTIONS.ratings, entryId), {
         ...payload,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -154,7 +154,7 @@ export function AppDataProvider({ children }) {
     if (!ratingId) return;
 
     if (hasFirebaseConfig() && firebaseDb) {
-      await deleteDoc(doc(firebaseDb, 'ratings', ratingId));
+      await deleteDoc(doc(firebaseDb, FIRESTORE_COLLECTIONS.ratings, ratingId));
       return;
     }
 

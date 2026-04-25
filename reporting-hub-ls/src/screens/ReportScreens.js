@@ -6,11 +6,10 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { useAppData } from '../context/AppDataContext';
+import { useMasterData } from '../context/MasterDataContext';
 import { useReports } from '../context/ReportsContext';
-import {
-  STAFF, CLASSES, COURSES, FACULTIES,
-  getClassDisplayName,
-} from '../data/seedData';
+import { getClassDisplayName } from '../data/seedData';
+import { validateRating, validateReportForm } from '../services/validation';
 import { Colors, Spacing, BorderRadius, Typography } from '../theme';
 import { Card, SearchBar, ScreenHeader, Button, EmptyState, StatCard } from '../components/UI';
 import { exportExcel, REPORT_COLUMNS, ATTENDANCE_COLUMNS } from '../utils/exportUtils';
@@ -32,18 +31,19 @@ async function exportWithFeedback(rows, columns, filename, title, emptyMessage =
 export function ReportsScreen({ navigation }) {
   const { user } = useAuth();
   const { reports, deleteReport } = useReports();
+  const { staff, faculties } = useMasterData();
   const [query,  setQuery]  = useState('');
   const [filter, setFilter] = useState('All');
   const [sortBy, setSortBy] = useState('newest');
   const [exporting, setExporting] = useState(false);
 
-  const staff = STAFF.find(s => s.id === user?.staffId);
+  const lecturer = staff.find(s => s.id === user?.staffId);
 
   let scoped = reports;
   if (user?.role === 'Lecturer') {
-    scoped = reports.filter(r => staff && r.lecturerName === staff.name);
+    scoped = reports.filter(r => lecturer && r.lecturerName === lecturer.name);
   } else if (user?.role === 'PRL' || user?.role === 'PL') {
-    const fac = FACULTIES.find(f => f.id === user?.faculty);
+    const fac = faculties.find(f => f.id === user?.faculty);
     if (fac) scoped = reports.filter(r => r.facultyName === fac.name);
   }
 
@@ -270,14 +270,15 @@ export function ReportFormScreen({ navigation }) {
   const { user }      = useAuth();
   const { timetable } = useAppData();
   const { addReport } = useReports();
-  const staff   = STAFF.find(s => s.id === user?.staffId);
-  const faculty = FACULTIES.find(f => f.id === staff?.faculty);
+  const { staff, faculties, classes, courses } = useMasterData();
+  const lecturer = staff.find(s => s.id === user?.staffId);
+  const faculty = faculties.find(f => f.id === lecturer?.faculty);
   const mySlots = timetable.filter(t => t.lecturerId === user?.staffId);
   const WEEKS   = Array.from({ length:14 }, (_,i) => 'Week '+(i+1));
 
   const [form, setForm] = useState({
     facultyName:'', className:'', week:'Week 8', dateOfLecture: new Date().toISOString().slice(0,10),
-    courseName:'', courseCode:'', lecturerName: staff?.name||'', studentsPresent:'',
+    courseName:'', courseCode:'', lecturerName: lecturer?.name||'', studentsPresent:'',
     registeredStudents:'', venue:'', scheduledTime:'', topicTaught:'', learningOutcomes:'', recommendations:'',
   });
   const [errors, setErrors] = useState({});
@@ -285,8 +286,12 @@ export function ReportFormScreen({ navigation }) {
   const [step, setStep]       = useState(0);
 
   useEffect(() => {
-    if (faculty) setForm(f => ({ ...f, facultyName: faculty.name }));
-  }, []);
+    setForm(current => ({
+      ...current,
+      facultyName: faculty?.name || current.facultyName,
+      lecturerName: lecturer?.name || current.lecturerName,
+    }));
+  }, [faculty, lecturer]);
 
   const set = (key, val) => {
     setForm(f => ({ ...f, [key]: val }));
@@ -294,8 +299,8 @@ export function ReportFormScreen({ navigation }) {
   };
 
   const handleSlot = (slot) => {
-    const course = COURSES.find(c => c.id === slot.courseId);
-    const cls    = CLASSES.find(c => c.id === slot.classId);
+    const course = courses.find(c => c.id === slot.courseId);
+    const cls    = classes.find(c => c.id === slot.classId);
     setForm(f => ({
       ...f,
       className:          slot.classId,
@@ -308,19 +313,9 @@ export function ReportFormScreen({ navigation }) {
   };
 
   const validate = () => {
-    const e = {};
-    if (!form.facultyName?.trim())   e.facultyName = 'Required';
-    if (!form.lecturerName?.trim())  e.lecturerName = 'Required';
-    if (!form.className?.trim())     e.className = 'Required';
-    if (!form.courseName?.trim())    e.courseName = 'Required';
-    if (!form.courseCode?.trim())    e.courseCode = 'Required';
-    if (!form.venue?.trim())         e.venue = 'Required';
-    if (!form.scheduledTime?.trim()) e.scheduledTime = 'Required';
-    if (!form.topicTaught?.trim())   e.topicTaught = 'Required';
-    if (!form.studentsPresent?.trim()) e.studentsPresent  = 'Required';
-    if (!form.dateOfLecture?.trim()) e.dateOfLecture = 'Required';
-    setErrors(e);
-    return Object.keys(e).length === 0;
+    const validation = validateReportForm(form);
+    setErrors(validation.errors);
+    return validation.isValid;
   };
 
   const getFirstInvalidStep = () => {
@@ -377,7 +372,7 @@ export function ReportFormScreen({ navigation }) {
               {mySlots.length===0
                 ? <Text style={styles.hintText}>No timetable entries found.</Text>
                 : mySlots.map((slot,idx) => {
-                    const course = COURSES.find(c => c.id===slot.courseId);
+                    const course = courses.find(c => c.id===slot.courseId);
                     const active = form.className===slot.classId && form.scheduledTime===slot.time;
                     return (
                       <TouchableOpacity key={idx} onPress={() => handleSlot(slot)}
@@ -453,12 +448,16 @@ export function ReportFormScreen({ navigation }) {
 export function AttendanceScreen({ navigation }) {
   const { user }    = useAuth();
   const { reports } = useReports();
+  const { staff, faculties } = useMasterData();
   const [query, setQuery] = useState('');
 
-  const staff = STAFF.find(s => s.id === user?.staffId);
+  const lecturer = staff.find(s => s.id === user?.staffId);
   let myReports = user?.role === 'Lecturer'
-    ? reports.filter(r => staff && r.lecturerName === staff.name)
-    : reports.filter(r => { const fac=FACULTIES.find(f=>f.id===user?.faculty); return fac&&r.facultyName===fac.name; });
+    ? reports.filter(r => lecturer && r.lecturerName === lecturer.name)
+    : reports.filter(r => {
+        const fac = faculties.find(f => f.id === user?.faculty);
+        return fac && r.facultyName === fac.name;
+      });
 
   const enriched = myReports.map(r => ({
     ...r,
@@ -520,8 +519,9 @@ export function AttendanceScreen({ navigation }) {
 export function RatingScreen({ navigation }) {
   const { user } = useAuth();
   const { ratings: savedRatings, saveRating: persistRating, deleteRating: removeRating } = useAppData();
-  const staff = STAFF.find(item => item.id === user?.staffId);
-  const facultyId = staff?.faculty || user?.faculty;
+  const { staff } = useMasterData();
+  const currentStaff = staff.find(item => item.id === user?.staffId);
+  const facultyId = currentStaff?.faculty || user?.faculty;
   const [ratings,  setRatings]  = useState(() =>
     savedRatings
       .filter(item => item.studentId === user?.id)
@@ -534,7 +534,7 @@ export function RatingScreen({ navigation }) {
       .reduce((acc, item) => ({ ...acc, [item.lecturerId]: true }), {})
   );
 
-  const lecturers = STAFF.filter(s => s.role==='Lecturer' && s.faculty===user?.faculty).slice(0,12);
+  const lecturers = staff.filter(s => s.role === 'Lecturer' && s.faculty === user?.faculty).slice(0, 12);
   const avgRating = Object.values(ratings).length>0
     ? (Object.values(ratings).reduce((a,v)=>a+v,0)/Object.values(ratings).length).toFixed(1) : '—';
 
@@ -559,10 +559,23 @@ export function RatingScreen({ navigation }) {
     : '0.0';
 
   const submitRating = async (id) => {
-    if (!ratings[id]) { Alert.alert('No star selected','Please tap a star first'); return; }
+    const selectedLecturer = lecturers.find(item => item.id === id);
+    const validation = validateRating({
+      lecturerId: id,
+      studentId: user?.id,
+      rating: ratings[id],
+      comment: comments[id] || '',
+    });
+
+    if (!validation.isValid) {
+      Alert.alert('Rating not ready', validation.errors.rating || validation.errors.comment || 'Please complete the rating first.');
+      return;
+    }
+
     await persistRating({
       studentId: user?.id,
       lecturerId: id,
+      lecturerName: selectedLecturer?.name || '',
       rating: ratings[id],
       comment: comments[id] || '',
       faculty: user?.faculty,
@@ -611,7 +624,7 @@ export function RatingScreen({ navigation }) {
             <EmptyState icon="star-outline" message="No ratings submitted yet" />
           ) : (
             visibleRatings.map(item => {
-              const lecturer = STAFF.find(member => member.id === item.lecturerId);
+              const lecturer = staff.find(member => member.id === item.lecturerId);
               return (
                 <Card key={item.id}>
                   <View style={{ flexDirection:'row', alignItems:'center', marginBottom:10 }}>
@@ -709,13 +722,14 @@ export function RatingScreen({ navigation }) {
 export function MonitoringScreen({ navigation }) {
   const { user }    = useAuth();
   const { reports } = useReports();
+  const { staff, faculties } = useMasterData();
   const [tab, setTab] = useState('overview');
-  const staff = STAFF.find(s => s.id === user?.staffId);
+  const lecturer = staff.find(s => s.id === user?.staffId);
   const isLecturer = user?.role === 'Lecturer';
 
-  const fac = FACULTIES.find(f => f.id===user?.faculty);
+  const fac = faculties.find(f => f.id===user?.faculty);
   const myReports = isLecturer
-    ? reports.filter(r => staff && r.lecturerName === staff.name)
+    ? reports.filter(r => lecturer && r.lecturerName === lecturer.name)
     : reports.filter(r => fac && r.facultyName===fac.name);
   const tabs = isLecturer ? ['overview','classes'] : ['overview','classes','lecturers'];
 
